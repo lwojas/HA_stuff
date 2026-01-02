@@ -1,0 +1,91 @@
+blueprint:
+  name: "IKEA Bilresa Scroll Wheel – Smooth Dimming (HA v2)"
+  description: >
+    Natural dimming for IKEA Bilresa scroll wheel.
+    One event = one brightness step. Works with Matter devices.
+  domain: automation
+
+  input:
+    scroll_right_event:
+      name: Scroll Wheel Event – Right
+      selector:
+        entity:
+          domain: event
+
+    scroll_left_event:
+      name: Scroll Wheel Event – Left
+      selector:
+        entity:
+          domain: event
+
+    target_light:
+      name: Target Light or Light Group
+      selector:
+        entity:
+          domain: light
+
+    step_pct:
+      name: Brightness step per scroll (%)
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 20
+
+    min_on_pct:
+      name: Minimum brightness when turning on (%)
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 50
+
+    enable_toggle:
+      name: Enable short-press toggle
+      default: true
+      selector:
+        boolean
+
+trigger:
+  - platform: state
+    entity_id: !input scroll_right_event
+    id: right
+
+  - platform: state
+    entity_id: !input scroll_left_event
+    id: left
+
+action:
+  - variables:
+      direction: "{{ 1 if trigger.id == 'right' else -1 }}"
+      step: !input step_pct
+      light_entity: !input target_light
+      min_on: !input min_on_pct
+      light_on: "{{ states(light_entity) == 'on' }}"
+
+  # Handle scroll (long press)
+  - choose:
+      # LIGHT IS ON → step brightness
+      - conditions:
+          - condition: template
+            value_template: "{{ light_on }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: !input target_light
+            data:
+              brightness_step_pct: "{{ step * direction }}"
+
+      # LIGHT IS OFF → only react to brighten
+      - conditions:
+          - condition: template
+            value_template: "{{ not light_on and direction > 0 }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: !input target_light
+            data:
+              brightness_pct: "{{ min_on }}"
+
+mode: queued
+max: 10
